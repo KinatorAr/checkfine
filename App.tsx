@@ -1,45 +1,31 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import React, {useState} from 'react';
+import {StyleSheet, Text, Modal, TextInput, View, ScrollView, Pressable, Alert} from 'react-native';
+import { SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
+import LoginComponent from './src/components/login';
+import RegisterComponent from './src/components/register';
+
+// Definir los tipos de páginas que podemos mostrar
+type PageName = 
+| 'login'
+| 'register'
+
+// Es una buena práctica definir las props que tus pantallas esperan
+// Así, tus componentes Login y Register saben que recibirán setPage
+export interface ScreenProps {
+  setPage: (page: PageName) => void;
+}
+
 
 function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+  const [page, setPage] = useState<PageName>('login');
 
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
+      {page === 'login' && <LoginComponent setPage={setPage}/>}
+      {page === 'register' && <RegisterComponent setPage={setPage}/>}
     </SafeAreaProvider>
   );
 }
-
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
 
 export default App;
