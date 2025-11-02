@@ -115,7 +115,7 @@ const Home = ({setPage, setSelectedVehicle}: ScreenProps) => {
                 placa: data.placa,
                 marca: data.marca,
                 modelo: data.modelo,
-                año: data.anio,
+                anio: data.anio,
                 color: data.color,
             });
             });
@@ -142,7 +142,7 @@ const Home = ({setPage, setSelectedVehicle}: ScreenProps) => {
         <Pressable style={styles.vehiculoCard}>
             <Text style={styles.vehiculoPlaca}>{item.placa}</Text>
             <Text style={styles.vehiculoInfo}>
-                {item.marca} {item.modelo} ({item.año})
+                {item.marca} {item.modelo} ({item.anio})
             </Text>
             <Text style={styles.vehiculoInfo}>Color: {item.color}</Text>
             <Pressable style={styles.inspeccionarBtn} onPress={() => handleInspectVehicle(item)}>

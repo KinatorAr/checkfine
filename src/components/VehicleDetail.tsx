@@ -103,7 +103,7 @@ const VehicleDetail = ({setPage, selectedVehicle}: ScreenProps) => {
         <View style={styles.infoContainer}>
             <Text style={styles.placa}>{selectedVehicle.placa}</Text>
             <Text style={styles.infoText}>{selectedVehicle.marca} {selectedVehicle.modelo}</Text>
-            <Text style={styles.infoText}>Año: {selectedVehicle.año} | Color: {selectedVehicle.color}</Text>
+            <Text style={styles.infoText}>Año: {selectedVehicle.anio} | Color: {selectedVehicle.color}</Text>
         </View>
 
         {/* --- Botón de Nueva Inspección --- */}

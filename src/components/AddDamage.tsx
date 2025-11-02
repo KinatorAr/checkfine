@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo} from 'react';
 import { StyleSheet, Text, TextInput, View, ScrollView, Pressable, Alert, Image} from 'react-native';
 import { ScreenProps, Damage } from '../../App'; 
 import { Svg, Path } from 'react-native-svg';
 import { launchCamera, CameraOptions, ImagePickerResponse } from 'react-native-image-picker';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import { CarDiagram, VehiclePart } from './CarDiagrama';
 
 // --- Icono ArrowLeftIcon ---
 const ArrowLeftIcon = ({ color, size }: { color?: string; size?: number }) => (
@@ -17,6 +18,27 @@ const CameraIcon = ({ color, size }: { color?: string; size?: number }) => (
         <Path stroke="none" d="M0 0h24v24H0z" fill="none"/><Path d="M5 7h1a2 2 0 0 0 2 -2a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2" /><Path d="M9 13a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
     </Svg>
 );
+// --- Icono XCircle ---
+const XCircleIcon = ({ color, size }: { color?: string; size?: number }) => (
+    <Svg width={size || 24} height={size || 24} viewBox="0 0 24 24" fill="none" stroke={color || 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <Path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+        <Path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+        <Path d="M10 10l4 4m0 -4l-4 4" />
+    </Svg>
+);
+
+// Seccion de partes del vehiculo para el diagrama
+// Mapeo de los IDs nombres de las partes del vehiculo
+const PartesToAreaMap: Record<VehiclePart, string> = {
+  'hood': 'Cofre', 'windshield': 'Parabrisas', 'roof': 'Techo', 'trunk': 'Cajuela',
+  'front_bumper': 'Defensa Del.', 'rear_bumper': 'Defensa Tras.',
+  'front_left_door': 'Puerta Del. Izq.', 'rear_left_door': 'Puerta Tras. Izq.',
+  'front_right_door': 'Puerta Del. Der.', 'rear_right_door': 'Puerta Tras. Der.',
+  'front_left_headlight': 'Faro Del. Izq.', 'front_right_headlight': 'Faro Del. Der.',
+  'rear_left_headlight': 'Calavera Tras. Izq.', 'rear_right_headlight': 'Calavera Tras. Der.',
+  'front_left_tire': 'Llanta Del. Izq.', 'front_right_tire': 'Llanta Del. Der.',
+  'rear_left_tire': 'Llanta Tras. Izq.', 'rear_right_tire': 'Llanta Tras. Der.',
+};
 
 
 const AddDamage = ({ setPage, addDamageToList }: ScreenProps) => {
@@ -25,7 +47,24 @@ const AddDamage = ({ setPage, addDamageToList }: ScreenProps) => {
     const [ubicacion, setUbicacion] = useState('');
     const [comentarios, setComentarios] = useState('');
     const [fotoUri, setFotoUri] = useState<string | null>(null); // Guardará la URI de la foto
+    const [selectedParts, setSelectedParts] = useState<VehiclePart[]>([]);
 
+    // Funcion para manejar la seleccion de partes en el diagrama
+    const handlePartClick = (partId: VehiclePart) => {
+        setSelectedParts((prev) =>
+        prev.includes(partId) ? prev.filter((p) => p !== partId) : [...prev, partId]
+        );
+    };
+
+    const handleClearSelection = () => {
+        setSelectedParts([]); // Simplemente vacía el array
+    };
+
+    // Calculamos los nombres de áreas seleccionadas
+    const uniqueDamagedAreas = useMemo(() => {
+        return selectedParts.map((part) => PartesToAreaMap[part]).filter(Boolean);
+    }, [selectedParts]);
+    
     // --- Función para tomar la foto ---
     const handleTakePhoto = () => {
         const options: CameraOptions = {
@@ -54,8 +93,10 @@ const AddDamage = ({ setPage, addDamageToList }: ScreenProps) => {
 
     // --- Función para Guardar el Daño (Temporalmente) ---
     const handleSaveDamage = () => {
-        if (!tipoDano || !ubicacion) {
-        Alert.alert('Campos requeridos', 'Por favor, indica el tipo y la ubicación del daño.');
+        const ubicacionString = uniqueDamagedAreas.join(', ')
+
+        if (!tipoDano || selectedParts.length === 0) {
+        Alert.alert('Campos requeridos', 'Por favor, indica el tipo y selecciona el área dañada en el diagrama.');
         return;
         }
         
@@ -63,7 +104,7 @@ const AddDamage = ({ setPage, addDamageToList }: ScreenProps) => {
         const nuevoDano: Damage = {
         id: Math.random().toString(), // ID temporal
         tipo: tipoDano,
-        ubicacion: ubicacion,
+        ubicacion: ubicacionString,
         comentarios: comentarios,
         fotoUri: fotoUri || undefined, // Guardamos la URI si existe
         };
@@ -77,7 +118,6 @@ const AddDamage = ({ setPage, addDamageToList }: ScreenProps) => {
             Alert.alert("Error", "No se pudo agregar el daño.");
             return; // Detenemos la ejecución si no podemos agregar
         }
-        // ---------------------------------
         // Regresamos a la pantalla anterior
         setPage('NewInspection'); 
     };
@@ -90,7 +130,7 @@ const AddDamage = ({ setPage, addDamageToList }: ScreenProps) => {
             <ArrowLeftIcon color="#1b3d5c" size={28} />
             </Pressable>
             <Text style={styles.titulo}>Agregar Daño</Text>
-            <View style={{ width: 40 }} />{/* Espaciador */}
+            <View style={{ width: 40 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContainer}>
@@ -103,16 +143,36 @@ const AddDamage = ({ setPage, addDamageToList }: ScreenProps) => {
             value={tipoDano}
             onChangeText={setTipoDano}
             />
-
             {/* --- Ubicación --- */}
-            <Text style={styles.label}>Ubicación</Text>
-            <TextInput
+            <View style={styles.labelContainer}>
+                <Text style={styles.labelEliminar}>Ubicación</Text>
+                {/* Mostramos el botón solo si hay algo seleccionado */}
+                {selectedParts.length > 0 && (
+                    <Pressable style={styles.clearButton} onPress={handleClearSelection}>
+                        <XCircleIcon color="#D9534F" size={16} />
+                        <Text style={styles.clearButtonText}>Limpiar</Text>
+                    </Pressable>
+                )}
+            </View>
+            <View style={styles.svgContainer}>
+                <CarDiagram selectedParts={selectedParts} onPartClick={handlePartClick} height={220}/>
+            </View>
+            <View style={styles.selectedAreasContainer}>
+                {uniqueDamagedAreas.length > 0 ? (
+                    uniqueDamagedAreas.map(area => (
+                        <Text key={area} style={styles.selectedAreaBadge}>{area}</Text>
+                    ))
+                ) : (
+                    <Text style={styles.noSelectionText}>Ninguna área seleccionada.</Text>
+                )}
+            </View>
+            {/* <TextInput
             style={styles.input}
             placeholder="Ej. Puerta delantera izquierda, Cofre"
             placeholderTextColor="#B3B3B4"
             value={ubicacion}
             onChangeText={setUbicacion}
-            />
+            /> */}
 
             {/* --- Comentarios --- */}
             <Text style={styles.label}>Comentarios (Opcional)</Text>
@@ -219,6 +279,67 @@ const styles = StyleSheet.create({
     },
     btnGuardar: { backgroundColor: '#1b3d5c', padding: 18, borderRadius: 8, alignItems: 'center', marginTop: 10 },
     btnGuardarTexto: { color: '#FFF', fontSize: 18, fontWeight: '900', fontFamily: 'RobotoCondensed' },
+        svgContainer: {
+        alignItems: 'center',
+        marginBottom: 15,
+        paddingVertical: 10, // Añadir padding vertical
+        borderWidth: 1,
+        borderColor: '#EEE',
+        borderRadius: 8,
+        backgroundColor: '#F9F9F9', // Fondo suave
+    },
+    selectedAreasContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginBottom: 20,
+        minHeight: 30,
+    },
+    selectedAreaBadge: {
+        backgroundColor: '#D9534F', // Rojo
+        color: 'white',
+        paddingHorizontal: 12, // Más padding
+        paddingVertical: 6,
+        borderRadius: 15,
+        marginRight: 8, // Más espacio
+        marginBottom: 8,
+        fontSize: 14,
+        fontFamily: 'RobotoCondensed',
+        overflow: 'hidden',
+        fontWeight: '500', // Un poco más grueso
+    },
+    noSelectionText: {
+        fontSize: 14,
+        color: '#888',
+        fontStyle: 'italic',
+        fontFamily: 'RobotoCondensed',
+    },
+        labelContainer: { // Nuevo contenedor para el label y el botón
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    labelEliminar: { // Quitado marginBottom
+        fontSize: 18,
+        color: '#1b3d5c',
+        fontWeight: '600',
+        fontFamily: 'RobotoCondensed',
+    },
+    clearButton: { // Nuevo estilo
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        borderRadius: 5,
+        backgroundColor: '#FEE2E2', // Fondo rojo claro
+    },
+    clearButtonText: { // Nuevo estilo
+        color: '#D9534F', // Texto rojo
+        fontSize: 14,
+        fontWeight: '600',
+        marginLeft: 4,
+        fontFamily: 'RobotoCondensed',
+    },
 });
 
 export default AddDamage;

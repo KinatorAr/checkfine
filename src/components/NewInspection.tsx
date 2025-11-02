@@ -8,13 +8,15 @@ import React, {useEffect, useState} from 'react';
     Pressable,
     Alert,
     ActivityIndicator,
+    Platform
     } from 'react-native';
 import {ScreenProps, Damage} from '../../App';
 import {Svg, Path} from 'react-native-svg';
 
-import {db, auth, storage} from '../../FirebaseConfig';
+import {db, auth, storage, app, functions} from '../../FirebaseConfig';
 import {collection, addDoc, serverTimestamp} from 'firebase/firestore';
 import { ref, uploadBytesResumable, uploadBytes, getDownloadURL } from "firebase/storage";
+import { httpsCallable } from "firebase/functions";
 import {SafeAreaView} from 'react-native-safe-area-context';
 
 // --- Iconos (ArrowLeftIcon, PlusIcon, TrashIcon) ---
@@ -33,6 +35,11 @@ const TrashIcon = ({color, size}: {color?: string; size?: number}) => (
     <Path stroke="none" d="M0 0h24v24H0z" fill="none"/><Path d="M4 7l16 0" /><Path d="M10 11l0 6" /><Path d="M14 11l0 6" /><Path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><Path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
     </Svg>
     );
+const CalculatorIcon = ({ color, size }: { color?: string; size?: number }) => (
+    <Svg width={size || 24} height={size || 24} viewBox="0 0 24 24" fill="none" stroke={color || 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <Path stroke="none" d="M0 0h24v24H0z" fill="none"/><Path d="M4 3m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z" /><Path d="M8 7m0 1a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1v1a1 1 0 0 1 -1 1h-6a1 1 0 0 1 -1 -1z" /><Path d="M8 14l0 .01" /><Path d="M12 14l0 .01" /><Path d="M16 14l0 .01" /><Path d="M8 17l0 .01" /><Path d="M12 17l0 .01" /><Path d="M16 17l0 .01" />
+    </Svg>
+);
 
 // --- Definimos las props específicas para NewInspection ---
 interface NewInspectionProps extends ScreenProps {
@@ -43,10 +50,15 @@ interface NewInspectionProps extends ScreenProps {
     setDamages: (damages: Damage[]) => void;
     }
 
+    // Definimos la llamada a la Cloud Function
+    const getEstimate = httpsCallable(functions, 'generarCotizacion');
+
     const NewInspection = ({setPage, selectedVehicle, currentDamages, clearDamages, setDamages}: NewInspectionProps) => {
     const [tipoInspeccion, setTipoInspeccion] = useState<'Entrada' | 'Salida' | ''>('');
     const [kilometraje, setKilometraje] = useState('');
     const [loading, setLoading] = useState(false);
+    const [loadingQuote, setLoadingQuote] = useState(false); // Para cotizar
+    const [estimatedCost, setEstimatedCost] = useState<string | null>(null); // Guardará la cotización en TABLA
 
     if (!selectedVehicle) {
         setPage('Home'); // Navegación Correcta
@@ -62,6 +74,51 @@ interface NewInspectionProps extends ScreenProps {
     const handleRemoveDamage = (idToRemove: string) => {
         const updatedDamages = currentDamages.filter(dano => dano.id !== idToRemove);
         setDamages(updatedDamages);
+    };
+
+    // FUNCIÓN para llamar a la Cloud Function!
+    const handleGetEstimate = async () => {
+        if (currentDamages.length === 0) {
+            Alert.alert("Sin daños", "Agrega al menos un daño para poder cotizar.");
+            return;
+        }
+        if (!tipoInspeccion || !kilometraje) {
+            Alert.alert('Datos faltantes', 'Por favor, define el Tipo de Inspección y el Kilometraje para cotizar.');
+            return;
+        }
+        setLoadingQuote(true);
+        setEstimatedCost(null);
+        try {
+            // 1. Preparamos los datos para enviar
+            const dataToSend = {
+                vehicle: {
+                    marca: selectedVehicle.marca,
+                    modelo: selectedVehicle.modelo,
+                    anio: selectedVehicle.anio,
+                },
+                damages: currentDamages.map(d => ({
+                    tipo: d.tipo,
+                    ubicacion: d.ubicacion,
+                    comentarios: d.comentarios,
+                })),
+                kilometraje: kilometraje,
+                tipoInspeccion: tipoInspeccion,
+            };
+            // 2. Llamamos a la Cloud Function 'generarCotizacion'
+            console.log("Enviando datos a la IA:", dataToSend);
+            const result: any = await getEstimate(dataToSend);
+            
+            // 3. Recibimos la respuesta (el texto de la tabla)
+            const quoteText = result.data.cotizacion;
+            console.log("Respuesta de IA recibida:", quoteText);
+            
+            setEstimatedCost(quoteText); // Guardamos la tabla de texto
+            setLoadingQuote(false);
+        } catch (error) {
+            console.error("Error al cotizar (Cloud Function): ", error);
+            setLoadingQuote(false);
+            Alert.alert("Error de Cotización", "No se pudo conectar con el servicio de IA.");
+        }
     };
 
   // --- Función para Guardar la Inspección y los Daños ---
@@ -93,7 +150,7 @@ interface NewInspectionProps extends ScreenProps {
         // Apuntar a la colección 'danos'
         const danosCollectionRef = collection(db, 'danos');
         // Crear una promesa para cada operación de guardado de daño
-const promises = currentDamages.map(async (dano) => {
+        const promises = currentDamages.map(async (dano) => {
             let fotoUrl: string | null = null;
             const uri = dano.fotoUri; // Guardamos en una variable local
             if (uri) { // Comprobamos la variable local
@@ -230,7 +287,53 @@ const promises = currentDamages.map(async (dano) => {
                         <Text style={styles.btnAddDanoText}>Agregar Daño</Text>
                     </Pressable>
                 </View>
+                {/* Sección Cotización */}
+                <View style={styles.cotizadorSection}>
+                    <Text style={styles.label}>Cotizador (IA)</Text>
+                    <Pressable 
+                        style={[styles.btnCalcular, (currentDamages.length === 0 || loadingQuote) && styles.btnCalcularDisabled]} 
+                        onPress={handleGetEstimate} 
+                        disabled={currentDamages.length === 0 || loadingQuote}
+                    >
+                        <CalculatorIcon color={(currentDamages.length === 0 || loadingQuote) ? "#AAA" : "#1b3d5c"} size={20} />
+                        {loadingQuote ? (
+                            <Text style={styles.btnCalcularText}>Generando cotización...</Text>
+                        ) : (
+                            <Text style={styles.btnCalcularText}>Cotizar Daños (IA)</Text>
+                        )}
+                    </Pressable>
 
+                    {/* Mostramos el spinner mientras carga la IA */}
+                    {loadingQuote && <ActivityIndicator size="small" color="#1b3d5c" style={{marginTop: 15}} />}
+
+                    {/* Mostramos la cotización (la tabla de texto) */}
+                    {estimatedCost && !loadingQuote && (
+                        <View style={styles.quoteResultContainer}>
+                            <Text style={styles.quoteResultText}>{estimatedCost}</Text>
+                        </View>
+                    )}
+                </View>
+                    <Pressable
+                    onPress={async () => {
+                        try {
+                        const testData = {
+                            vehicle: { marca: "Toyota", modelo: "Camry", anio: "2025" },
+                            damages: [{ tipo: "Golpe", ubicacion: "Cajuela", comentarios: "Fuerte" }],
+                            kilometraje: "5000",
+                            tipoInspeccion: "Entrada"
+                        };
+                        const result: any = await getEstimate(testData);
+                        console.log("✅ Resultado Cloud Function:", result.data);
+                        Alert.alert("Éxito", "Función ejecutada correctamente.");
+                        } catch (error: any) {
+                        console.error("❌ Error al llamar la función:", error);
+                        Alert.alert("Error", error.message);
+                        }
+                    }}
+                    style={{ padding: 15, backgroundColor: "#1b3d5c", margin: 20, borderRadius: 10 }}
+                    >
+                    <Text style={{ color: "white", textAlign: "center" }}>Probar función Firebase</Text>
+                    </Pressable>
                 {/* Botón Guardar */}
                 <Pressable
                 style={styles.btnGuardar}
@@ -279,7 +382,51 @@ const promises = currentDamages.map(async (dano) => {
     marginTop: 3,
     fontFamily: 'RobotoCondensed',
 },
+    cotizadorSection: {
+        marginTop: 20,
+        marginBottom: 30,
+        borderTopWidth: 1,
+        borderTopColor: '#EEE',
+        paddingTop: 20,
+        alignItems: 'center',
+    },
+    btnCalcular: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 30,
+        borderRadius: 8,
+        borderWidth: 1.5,
+        borderColor: '#1b3d5c',
+        backgroundColor: '#EAF0F6',
+    },
+    btnCalcularDisabled: {
+        borderColor: '#AAA',
+        backgroundColor: '#FAFAFA',
+    },
+    btnCalcularText: {
+        color: '#1b3d5c',
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 10,
+        fontFamily: 'RobotoCondensed',
+    },
+    quoteResultContainer: { // Para mostrar la tabla
+        marginTop: 15,
+        padding: 15,
+        backgroundColor: '#F9F9F9',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#EEE',
+        width: '100%', // Ocupa todo el ancho
+    },
+    quoteResultText: {
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', // ¡Mejor para tablas!
+        fontSize: 12,
+        color: '#333',
+    },
     });
 
-    export default NewInspection;
+export default NewInspection;
 
