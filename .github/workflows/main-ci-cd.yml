@@ -1,0 +1,72 @@
+name: React Native CI/CD - Full Release Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Permite ejecutar el workflow manualmente
+
+jobs:
+  # --- 1. BUILD ARTEFACTOS (Compila el código de React Native) ---
+  build_artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies and Build Android (Staging)
+        run: |
+          npm install
+          # Asume que este comando genera el APK de release para staging
+          cd android && ./gradlew assembleRelease
+          
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-staging-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+
+  # --- 2. PROVISIONAMIENTO DEL BACKEND (Llama al script A) ---
+  provision_staging_environment:
+    needs: build_artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run IaC Script (Provisioning)
+        run: CI-CD/environment-setup/provision_staging.sh
+
+  # --- 3. DISTRIBUCIÓN A TESTERS (Llama al script B) ---
+  distribute_to_testers:
+    needs: provision_staging_environment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-staging-apk # Descarga el artefacto
+          path: . # Descarga en el directorio actual
+
+      - name: Run Distribution Script
+        run: CI-CD/deployment-scripts/distribute_staging.sh
+
+  # --- 4. PRUEBAS DE CALIDAD E2E (Llama al script C) ---
+  run_e2e_tests:
+    needs: distribute_to_testers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run E2E Tests Script
+        run: CI-CD/tests/run_e2e_tests.sh
+        
+  # --- 5. DESPLIEGUE FINAL A PRODUCCIÓN ---
+  final_production_deploy:
+    needs: run_e2e_tests
+    # 🚨 CONFIGURAR SECRETS Y ENVIRONMENT EN GITHUB 🚨
+    environment: Production 
+    runs-on: ubuntu-latest
+    steps:
+      - name: Final Production Deploy Script
+        run: echo "Aquí irían los comandos para subir el build final a Google Play / App Store"
